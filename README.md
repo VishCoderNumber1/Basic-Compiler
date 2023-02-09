@@ -1,4 +1,10 @@
 ﻿# Basic-Compiler
 
 
-# Hello
+# Hello World
+
+main(){
+<br>
+print("Hello World")
+<br>
+}
