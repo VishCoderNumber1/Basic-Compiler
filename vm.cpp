@@ -1,3 +1,12 @@
+
+/* (
+    When I use good grammar,
+    it is because of Tscoding's language
+    (https://gitlab.com/tsoding/porth)
+)*/
+#ifndef MAIN_COMPILER
+#define MAIN_COMPILER
+
 #include <iostream>
 using namespace std;
 #include <fstream>
@@ -6,11 +15,60 @@ using namespace std;
 #include <cstring>
 #include <sstream>
 
-enum types{
+
+
+// UTILS
+
+
+
+
+
+enum types
+{
     COMPILER,
-    INTERP
+    HELP
 };
-size_t count_substrings(std::string const &needle, std::string const &haystack) {
+
+
+
+void help()
+{
+    cout << "Help \n";
+    cout << "  -o <output>        Specifies output of file (if not given it will be derived from file name)\n";
+    cout << "   <file>      -  Specifies the file to use (Required Field)";
+    exit(1);
+}
+
+
+
+
+void CMD(string command, string file)
+{
+    int a = system(command.c_str());
+    if (a == 1){
+        cout << "\n\n[CMD] Error while running '"+command+"' on file '"+file+"'\n";
+        exit(1);
+    }
+    cout << "[CMD] Ran "+command.substr(0, command.find_first_of(" "))+" with output file " + file + "\n";
+}
+
+
+
+
+string changeFileExt(string file, string ext){
+    size_t n = file.find_last_of('.');
+    if (n==string::npos){
+        return file;
+    };
+    return file.substr(0, n+1) + ext;
+}
+
+
+
+
+
+size_t count_substrings(std::string const &needle, std::string const &haystack)
+{
     size_t count = 0;
 
     for (size_t pos =0; (pos=haystack.find(needle, pos)) != std::string::npos; ++pos, ++count)
@@ -18,49 +76,119 @@ size_t count_substrings(std::string const &needle, std::string const &haystack) 
 
    return count;
 }
+
+
+
+void runAsm(string output, string file)
+{
+    CMD("nasm -fwin32 "+output, file);
+    CMD("gcc "+file.substr(0, file.find_last_of("."))+".obj"+" -o "+file.substr(0, file.find_last_of('.')+1)+"exe", file);
+}
+
+
+
+std::string remove_extension(const std::string& filename)
+{
+    size_t lastdot = filename.find_last_of(".");
+    if (lastdot == std::string::npos) return filename;
+    return filename.substr(0, lastdot); 
+}
+
+
 void CompileProj(string file, int type, string output);
+
+
+
 vector<string> files;
+
+
+
+
+// TOKENS
+
+
+
+
 #include <cctype>
 
 enum tokTypes{
+
     LP,
+
     RP,
+
     LB,
+
     RB,
+
+    LNSB,
+
+    RNSB,
+
     COLON,
+
     ID,
+
     STRING,
+
     NUMBER,
+
     EOFT,
+
     EQUALS,
+
     PLUS,
+
     MINUS,
+
     MUL,
+
     DIV,
+
     GT,
+
     LT,
+
     SEMICOLON,
-    COMMA
+
+    COMMA,
+
+    LAST_NUM
+    // TELLS US IF THERE IS AN ERROR WITH THE TOKEN TYPE IF IT IS TOO BIG
+
 };
+
+
+
 
 class Token{
     public:
-    tokTypes type;
-    string value;
-    Token(tokTypes typeS, string valueS){
-        type = typeS;
-        value = valueS;
-    }
-    Token(){;}
-    Token(void*){;}
+        tokTypes type;
+        string value;
+        Token(tokTypes typeS, string valueS)
+        {
+            type = typeS;
+            value = valueS;
+            if (type >= LAST_NUM){
+                cout << "Exhaustive handling of tok operations";
+                exit(1);
+            }
+        }
+        Token(){;}
 };
 
-Token new_tok(tokTypes type, string valueS){
+
+
+
+Token new_tok(tokTypes type, string valueS)
+{
     Token t;
     t.type = type;
     t.value = valueS;
     return t;
 }
+
+
 
 class Lexer{
     public:
@@ -70,18 +198,21 @@ class Lexer{
     int line = 0;
     int col = 0;
     char curChar = '\0';
-    Lexer(){}
-    Lexer(string contentsS, string fileS){
+    Lexer(){};
+    Lexer(string contentsS, string fileS)
+    {
         contents = contentsS;
         file = fileS;
     }
-    void lexer_advance(){
+    void lexer_advance()
+    {
         count++;
         if (curChar == '\n'){line++;col = 0;}
         else{col++;};
         curChar = contents[count];
     }
-    void lexer_error(string title, string desc){
+    void lexer_error(string title, string desc)
+    {
         cout << "File " << file << ",\n " << title << ": " << desc;
         char* pch = strtok((char*)contents.c_str(), (char*)"\n");
         if (line == 0){cout << "\n" << pch;};
@@ -95,9 +226,9 @@ class Lexer{
                 cout << "^";
             };
         };
-        exit(1);
     }
-    Token lex_tok(){
+    Token lex_tok()
+    {
         curChar = contents[count];
         switch (curChar){
             case '=': lexer_advance(); return new_tok(EQUALS, "=");
@@ -105,6 +236,8 @@ class Lexer{
             case ')': lexer_advance(); return new_tok(RP, ")");
             case '{': lexer_advance(); return new_tok(LB, "{");
             case '}': lexer_advance(); return new_tok(RB, "}");
+            case '[': lexer_advance(); return new_tok(LNSB, "[");
+            case ']': lexer_advance(); return new_tok(RNSB, "[");
             case ':': lexer_advance(); return new_tok(COLON, ":");
             case '\n': lexer_advance(); return lex_tok();
             case '+': lexer_advance(); return new_tok(PLUS, "+");
@@ -169,10 +302,15 @@ class Lexer{
                             str += "\b";
                             lexer_advance();
                             continue;
-                        }else{
-                            string str = string("'\\");
-                            str += curChar+string("'")+" is not a valid escape string";
-                            lexer_error("SyntaxError", str);
+                        }else if(curChar == '0' && quotes){
+                            str += "\0";
+                            lexer_advance();
+                            continue;
+                        }
+                        else{
+                            str += curChar;
+                            lexer_advance();
+                            continue;
                         }
                     }
                     str += curChar;
@@ -185,7 +323,7 @@ class Lexer{
             case '_': {
                 lexer_advance();
                 string id = "_";
-                while ((isalpha(curChar))&&curChar!='\n'){
+                while (isalnum(curChar)||curChar=='@'){
                     id += curChar;
                     lexer_advance();
                 };
@@ -194,7 +332,7 @@ class Lexer{
             default:
                 if (isalpha(curChar)){
                     string id;
-                    while ((isalpha(curChar))&&curChar!='\n'){
+                    while ((isalpha(curChar)||curChar=='@')&&curChar!='\n'){
                         id += curChar;
                         lexer_advance();
                     };
@@ -221,6 +359,13 @@ class Lexer{
     };
 };
 
+
+
+// COMPILER
+
+
+
+
 class Compile{
     public:
         Lexer lexer;
@@ -230,11 +375,13 @@ class Compile{
         int count = 0;
         int tabs = 0;
         int plusS = 0;
-        Compile(Lexer lexerS, vector<Token> toksS){
+        Compile(Lexer lexerS, vector<Token> toksS)
+        {
             lexer = lexerS;
             toks = toksS;
         }
-        void expect(Token expect){
+        void expect(Token expect)
+        {
             if (toks[i].type == expect.type){
                 i++;
             }else{
@@ -242,7 +389,8 @@ class Compile{
                 exit(1);
             };
         }
-        string addTabs(){
+        string addTabs()
+        {
             string rr;
             for (int i=0;i<tabs; i++){
                 rr += "\t";
@@ -257,8 +405,9 @@ class Compile{
         int ifStatement = 0;
         int doneCount = 0;
         int adds = 0;
-        string op = "";
-        string comp_tok(){
+        string op = "jne";
+        string comp_tok()
+        {
             switch (toks[i].type){
                 case STRING: {
                     string toput = "LC"+to_string(count)+": db '"+toks[i].value+"'"+", 0"+"\n";
@@ -325,7 +474,8 @@ class Compile{
                         i++;
                         if (str.substr(0, string("mov eax, ").length()) == "mov eax, "){
                             op = "jne";
-                            str += "mov ebx, 0\n\tcmp eax, ebx\n";
+                            str += "mov ebx, 0\n\t";
+                            str += "cmp eax, ebx\n";
                         }
                         sysOp = false;
                         string code = "";
@@ -335,12 +485,17 @@ class Compile{
                             i++;
                         }
                         tabs--;
-                        cout << str <<", "<<op;
-                        res = "ifSt"+to_string(ifStatement++) + ":\n\t"+ code + "\n\tjmp done"+to_string(doneCount+1)+"\n\t"+ res;
+                        string rs = res;
+                        res = "ifSt"+to_string(ifStatement++) + ":\n\t";
+                        res += code + "\n\t";
+                        res += "jmp done"+to_string(doneCount+1)+"\n\t";
+                        res += rs;
                         if (op != ""){
                             str += op + " "+"ifSt"+to_string(ifStatement-1)+"\n\t";
                         };
-                        string r = str+"\n"+addTabs()+"jmp done"+to_string(doneCount+1)+"\n"+addTabs()+"done"+to_string(doneCount+1)+":\n";
+                        string r = str+"\n"+addTabs();
+                        r += "jmp done"+to_string(doneCount+1)+"\n"+addTabs();
+                        r += "done"+to_string(doneCount+1)+":\n";
                         doneCount++;
                         tabs++;
                         if (toks[i+1].value == "else"){
@@ -351,7 +506,11 @@ class Compile{
                                 code += comp_tok();
                                 i++;
                             };
-                            res = "elseSt"+to_string(ifStatement++) + ":\n\t"+code+"\n\tjmp done"+to_string(ifStatement)+"\n\t"+res;
+                            rs = res;
+                            res = "elseSt"+to_string(ifStatement++) + ":\n\t";
+                            res += code+"\n\t";
+                            res += "jmp done"+to_string(ifStatement)+"\n\t";
+                            res += rs;
                             string d = "\tjmp ifSt"+to_string(ifStatement-1);
                             i++;
                             r = r.substr(0, r.length()-17) + "\tjmp elseSt"+to_string(ifStatement-1) + "\n\t"+ r.substr(r.length()-17, r.length());
@@ -430,12 +589,12 @@ class Compile{
                                 }
                                 res = "extern _printf\n" + res;
                                 val = "_printf";
-                            }else if(val == "MessageBox"){
-                                res = "extern _MessageBoxA@16\n" + res;
-                                val = "_MessageBoxA@16";
                             }else if(val == "exit"){
                                 res = "extern _exit\n" + res;
                                 val = "_exit";
+                            }else if(val == "MessageBox"){
+                                res = "extern _MessageBoxA@16\n" + res;
+                                val = "_MessageBoxA@16";
                             }else if(val[0] == '_'){
                                 res = "extern "+val+"\n"+res;
                             }
@@ -482,6 +641,58 @@ class Compile{
                         return "dec "+vn+"\n"+addTabs();
                     }
 
+                    if (toks[i].value == "["){
+                        sysOp = true;
+                    }
+                    
+                    
+                    if (toks[i-1].value == "argc"){
+                        r = "mov "+strs[cn++]+", [esp+4]\n"+addTabs();
+                        cn--;
+                        if (sysOp == false){
+                            r += "push "+strs[cn]+"\n"+addTabs();
+                            r += "mov "+strs[cn]+", 0\n"+addTabs();
+                        }
+                        cn++;
+                        i--;
+                        if (toks[i+1].value == "["){
+                            i++;
+                        }
+                    }else if(toks[i-1].value == "argv"){
+                        r = "mov "+strs[cn++]+", [esp+8]\n"+addTabs();
+                        if (sysOp == false){
+                            r += "push "+strs[cn]+"\n"+addTabs();
+                            r += "mov "+strs[cn]+", 0\n"+addTabs();
+                        }
+                        i--;
+                        cn++;
+                        if (toks[i+1].value == "["){
+                            i++;
+                        }
+                    }
+                    if (toks[i].value == "["){
+                        string str;
+                        int cnt = stoi(toks[i+1].value);
+                        i--;
+                        if (r == ""){
+                            str = "mov "+strs[cn++]+", "+toks[i].value + "\n" + addTabs();
+                            str += "mov "+strs[cn++]+", ["+strs[cn-2]+"+"+to_string(cnt*4)+"]\n" + addTabs();
+                            cn -= 2;
+                            str += "push "+strs[cn+1]+"\n"+addTabs();
+                            str += "mov "+strs[cn]+", 0\n"+addTabs();
+                            str += "mov "+strs[cn+1]+", 0\n"+addTabs();
+                            // mov ebx, list \n mov ecx, [ebx+4]\npush ecx\nmov ebx, 0\nmov ecx,0
+                        }else{
+                            str =  r;
+                            sysOp = false;
+                            str += "mov "+strs[cn-1]+", ["+strs[cn-2]+"+"+to_string(cnt*4)+"]\n"+addTabs();
+                            str += "push "+strs[cn-1]+"\n"+addTabs();
+                            str += "mov "+strs[cn-1]+", 0\n"+addTabs();
+                        }
+                        i+=3;
+                        return str;
+                    }
+
                     if (r==""){
                         i--;
                         if (sysOp){
@@ -502,18 +713,11 @@ class Compile{
             res = "global _main\nsection .text\nNULL equ 0\nTRUE equ 1\nFALSE equ 0\n" + res;
         }
 };
-void CMD(string command, string file){
-    system(command.c_str());
-    cout << "[CMD] Ran "+command.substr(0, command.find_first_of(" "))+" with output file " + file + "\n";
-}
 
-void print(vector<Token> toks){
-    for (int i=0;i<toks.size();i++){
-        cout << toks[i].value;
-        cout << "\n";
-    };
-}
-void CompileProj(string file, int type, string output){
+
+
+void CompileProj(string file, int type, string output)
+{
     files.push_back(file);
     ifstream stream(file);
     if(!stream){
@@ -573,50 +777,45 @@ void CompileProj(string file, int type, string output){
             }
         }
     };
-    if (type == COMPILER){
-        Compile cmp(lexer, toks);
-        cmp.all();
-        // cout << cmp.res;
-        fstream f(output, ios::out);
-        f << cmp.res;
-        f.close();
-        cout << "\n";
-    }else if(type == INTERP){
-        ;
-    };
+    Compile cmp(lexer, toks);
+    cmp.all();
+    // cout << cmp.res;
+    fstream f(output, ios::out);
+    f << cmp.res;
+    f.close();
+    cout << "\n";
 }
 
-void runAsm(string output, string file){
-    CMD("nasm -fwin32 "+output, file);
-    CMD("gcc "+file.substr(0, file.find_last_of("."))+".obj"+" -o "+file.substr(0, file.find_last_of('.')+1)+"exe", file);
-}
-std::string remove_extension(const std::string& filename) {
-    size_t lastdot = filename.find_last_of(".");
-    if (lastdot == std::string::npos) return filename;
-    return filename.substr(0, lastdot); 
-}
-int main(int argc,char** argv){
-    string output = "";
-    string file = "";
-    int type = INTERP;
+
+
+
+// MAIN
+
+
+
+int main(int argc,char** argv)
+{
+    string output = "";  // FILE TO USE AS OUTPUT
+    string file = "";    // FILE THAT WILL BE READ
+
+    int type = COMPILER; // TELLS WHETER IT IS GOING TO COMPILE CODE OR SHOW THE HELP
+
     for (int i=1;i<argc;i++){
         if (string(argv[i]) == "-o"){
             i++;
             output = string(argv[i]);
-        }else if(string(argv[i]) == "-comp"){
-            type = COMPILER;
-        }else if(string(argv[i]) == "-interp"){
-            type = INTERP;
+        }else if(string(argv[i]) == "-h"){
+            help();
         }else{
             file = string(argv[i]);
         };
     };
+    if (file == ""){
+        cout << "ERROR: NO FILE PASSED IN\n";
+        exit(1);
+    }
     if (output == ""){
-        size_t n = file.find_last_of('.');
-        if (n==string::npos){
-            output = file;
-        };
-        output = file.substr(0, n+1) + "asm";
+        output = changeFileExt(file, "asm");
     };
     CompileProj(file, type, output);
     runAsm(output, file);
@@ -628,3 +827,5 @@ int main(int argc,char** argv){
     }
     return 0;
 }
+
+#endif
